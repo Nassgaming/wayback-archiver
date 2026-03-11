@@ -33,6 +33,8 @@ func SetupRoutes(r *gin.Engine, handler *Handler, authCfg *config.AuthConfig) {
 	r.StaticFile("/", "./web/index.html")
 	r.StaticFile("/index.html", "./web/index.html")
 	r.StaticFile("/test.html", "./web/test.html")
+	r.StaticFile("/timeline", "./web/timeline.html")
+	r.StaticFile("/timeline.html", "./web/timeline.html")
 
 	// favicon（避免 404）
 	r.GET("/favicon.ico", func(c *gin.Context) {
@@ -44,6 +46,7 @@ func SetupRoutes(r *gin.Engine, handler *Handler, authCfg *config.AuthConfig) {
 		api.POST("/archive", handler.ArchivePage)
 		api.PUT("/archive/:id", handler.UpdatePage)
 		api.GET("/pages", handler.ListPages)
+		api.GET("/pages/timeline", handler.GetPageTimeline)
 		api.GET("/pages/:id", handler.GetPage)
 		api.DELETE("/pages/:id", handler.DeletePage)
 		api.GET("/search", handler.SearchPages)

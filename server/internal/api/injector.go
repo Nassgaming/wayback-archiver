@@ -2,15 +2,44 @@ package api
 
 import (
 	"fmt"
+	"net/url"
 	"regexp"
 
 	"wayback/internal/models"
 )
 
 // injectArchiveHeader 在页面顶部注入归档信息栏
-func injectArchiveHeader(html string, page *models.Page) string {
+func injectArchiveHeader(html string, page *models.Page, prev *models.Page, next *models.Page, snapshotTotal int) string {
 	// 格式化时间
 	capturedTime := page.CapturedAt.Format("2006-01-02 15:04:05")
+
+	// 构建快照导航 HTML
+	var navHTML string
+	if snapshotTotal > 1 {
+		prevLink := ""
+		if prev != nil {
+			prevLink = fmt.Sprintf(`<a href="/view/%d" style="color:white;text-decoration:none;padding:4px 10px;border:1px solid rgba(255,255,255,0.3);border-radius:3px;font-size:12px;background:rgba(255,255,255,0.1);" title="%s">◀ %s</a>`,
+				prev.ID, prev.FirstVisited.Format("2006-01-02 15:04:05"), prev.FirstVisited.Format("01-02 15:04"))
+		} else {
+			prevLink = `<span style="padding:4px 10px;font-size:12px;opacity:0.3;">◀</span>`
+		}
+
+		nextLink := ""
+		if next != nil {
+			nextLink = fmt.Sprintf(`<a href="/view/%d" style="color:white;text-decoration:none;padding:4px 10px;border:1px solid rgba(255,255,255,0.3);border-radius:3px;font-size:12px;background:rgba(255,255,255,0.1);" title="%s">%s ▶</a>`,
+				next.ID, next.FirstVisited.Format("2006-01-02 15:04:05"), next.FirstVisited.Format("01-02 15:04"))
+		} else {
+			nextLink = `<span style="padding:4px 10px;font-size:12px;opacity:0.3;">▶</span>`
+		}
+
+		timelineLink := fmt.Sprintf(`<a href="/timeline?url=%s" style="color:white;text-decoration:none;padding:4px 10px;border:1px solid rgba(255,255,255,0.3);border-radius:3px;font-size:12px;background:rgba(255,255,255,0.1);" title="查看所有快照">%d snapshots</a>`,
+			url.QueryEscape(page.URL), snapshotTotal)
+
+		navHTML = fmt.Sprintf(`
+		<div style="display:flex;align-items:center;gap:6px;">
+			%s %s %s
+		</div>`, prevLink, timelineLink, nextLink)
+	}
 
 	// 归档信息栏 HTML
 	archiveHeader := fmt.Sprintf(`
@@ -52,18 +81,21 @@ func injectArchiveHeader(html string, page *models.Page) string {
 			</div>
 		</div>
 	</div>
-	<a href="/" style="
-		color: white;
-		text-decoration: none;
-		padding: 6px 16px;
-		border: 1px solid rgba(255,255,255,0.3);
-		border-radius: 4px;
-		transition: all 0.2s;
-		font-size: 13px;
-		background: rgba(255,255,255,0.1);
-	" onmouseover="this.style.background='rgba(255,255,255,0.2)'" onmouseout="this.style.background='rgba(255,255,255,0.1)'">
-		← Back to Archives
-	</a>
+	<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+		%s
+		<a href="/" style="
+			color: white;
+			text-decoration: none;
+			padding: 6px 16px;
+			border: 1px solid rgba(255,255,255,0.3);
+			border-radius: 4px;
+			transition: all 0.2s;
+			font-size: 13px;
+			background: rgba(255,255,255,0.1);
+		">
+			← Back to Archives
+		</a>
+	</div>
 </div>
 <style>
 	body { margin-top: 80px !important; }
@@ -90,7 +122,7 @@ func injectArchiveHeader(html string, page *models.Page) string {
 		transform: none !important;
 	}
 </style>
-`, escapeHTML(page.URL), capturedTime)
+`, escapeHTML(page.URL), capturedTime, navHTML)
 
 	// 在 <body> 标签后注入
 	if bodyTagRe.MatchString(html) {

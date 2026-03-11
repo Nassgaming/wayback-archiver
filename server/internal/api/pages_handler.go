@@ -107,6 +107,27 @@ func (h *Handler) SearchPages(c *gin.Context) {
 	c.JSON(http.StatusOK, pages)
 }
 
+// GetPageTimeline 获取同一 URL 的所有快照
+func (h *Handler) GetPageTimeline(c *gin.Context) {
+	pageURL := c.Query("url")
+	if pageURL == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "missing url parameter"})
+		return
+	}
+
+	pages, err := h.db.GetPagesByURL(pageURL)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"url":       pageURL,
+		"snapshots": pages,
+		"total":     len(pages),
+	})
+}
+
 // DeletePage 删除页面
 func (h *Handler) DeletePage(c *gin.Context) {
 	id := c.Param("id")
