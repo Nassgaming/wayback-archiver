@@ -47,7 +47,6 @@ func rewriteResourcePathsWithResources(html string, pageID int64, timestamp stri
 		}
 
 		// 处理协议相对 URL（如 //example.com/path）
-		// 从完整 URL 中移除协议部分
 		protocolRelativeURL := strings.TrimPrefix(resource.URL, "https:")
 		protocolRelativeURL = strings.TrimPrefix(protocolRelativeURL, "http:")
 
@@ -75,14 +74,12 @@ func rewriteResourcePathsWithResources(html string, pageID int64, timestamp stri
 		}
 
 		// 处理相对路径
-		// 从资源 URL 中提取文件名
 		parsedURL, err := url.Parse(resource.URL)
 		if err != nil {
 			continue
 		}
 		filename := path.Base(parsedURL.Path)
 
-		// 替换 ./filename 和 filename 格式
 		relativePatterns := []string{
 			`src=["']\.?/?` + regexp.QuoteMeta(filename) + `["']`,
 			`href=["']\.?/?` + regexp.QuoteMeta(filename) + `["']`,
@@ -100,11 +97,9 @@ func rewriteResourcePathsWithResources(html string, pageID int64, timestamp stri
 			})
 		}
 
-		// 处理以 / 开头的绝对路径（如 /assets/style.css）
-		// 提取资源URL的路径部分
+		// 处理以 / 开头的绝对路径
 		resourcePath := parsedURL.Path
 		if resourcePath != "" {
-			// 构建带查询参数的完整路径（如果有的话）
 			pathWithQuery := resourcePath
 			if parsedURL.RawQuery != "" {
 				pathWithQuery = resourcePath + "?" + parsedURL.RawQuery
@@ -115,7 +110,6 @@ func rewriteResourcePathsWithResources(html string, pageID int64, timestamp stri
 				`src=["']` + escapedPath + `["']`,
 				`href=["']` + escapedPath + `["']`,
 				`url\(["']?` + escapedPath + `["']?\)`,
-				// 处理HTML实体编码的引号：url(&quot;/path&quot;)
 				`url\(&quot;` + escapedPath + `&quot;\)`,
 			}
 
