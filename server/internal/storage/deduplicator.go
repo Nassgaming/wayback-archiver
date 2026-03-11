@@ -100,35 +100,48 @@ func (d *Deduplicator) ProcessResource(url, resourceType, base64Content string, 
 		}
 	}
 
-	// 检查资源是否已存在
-	existing, err := d.db.GetResourceByHash(hash)
+	// 检查是否已有相同 URL 的资源记录
+	existingByURL, err := d.db.GetResourceByURL(url)
 	if err != nil {
-		return 0, nil, fmt.Errorf("db query failed: %w", err)
+		return 0, nil, fmt.Errorf("db query by url failed: %w", err)
 	}
 
-	if existing != nil {
-		// 资源已存在，更新最后见到时间
-		log.Printf("Resource exists (hash: %s), reusing: %s", hash[:16], url)
-		if err := d.db.UpdateResourceLastSeen(existing.ID); err != nil {
+	if existingByURL != nil {
+		// 同 URL 已存在，更新最后见到时间
+		log.Printf("Resource exists by URL (hash: %s), reusing: %s", hash[:16], url)
+		if err := d.db.UpdateResourceLastSeen(existingByURL.ID); err != nil {
 			return 0, nil, err
 		}
-		d.cache.Store(url, &resourceCacheEntry{resourceID: existing.ID, data: data, cachedAt: time.Now()})
-		return existing.ID, data, nil
+		d.cache.Store(url, &resourceCacheEntry{resourceID: existingByURL.ID, data: data, cachedAt: time.Now()})
+		return existingByURL.ID, data, nil
 	}
 
-	// 新资源，保存文件
-	filePath, err := d.storage.SaveResource(data, hash, resourceType)
+	// 检查是否有相同哈希的资源（不同 URL，内容相同）
+	existingByHash, err := d.db.GetResourceByHash(hash)
 	if err != nil {
-		return 0, nil, fmt.Errorf("save failed: %w", err)
+		return 0, nil, fmt.Errorf("db query by hash failed: %w", err)
 	}
 
-	// 创建数据库记录
+	var filePath string
+	if existingByHash != nil {
+		// 内容相同但 URL 不同，复用文件，创建新 DB 记录
+		filePath = existingByHash.FilePath
+		log.Printf("Same content (hash: %s) different URL, reusing file: %s", hash[:16], url)
+	} else {
+		// 全新资源，保存文件
+		filePath, err = d.storage.SaveResource(data, hash, resourceType)
+		if err != nil {
+			return 0, nil, fmt.Errorf("save failed: %w", err)
+		}
+	}
+
+	// 创建数据库记录（每个 URL 一条记录）
 	resourceID, err := d.db.CreateResource(url, hash, resourceType, filePath, int64(len(data)))
 	if err != nil {
 		return 0, nil, fmt.Errorf("db insert failed: %w", err)
 	}
 
-	log.Printf("New resource saved (hash: %s): %s", hash[:16], url)
+	log.Printf("New resource record (hash: %s): %s", hash[:16], url)
 	d.cache.Store(url, &resourceCacheEntry{resourceID: resourceID, data: data, cachedAt: time.Now()})
 	return resourceID, data, nil
 }

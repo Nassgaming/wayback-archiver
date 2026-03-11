@@ -28,7 +28,7 @@ CREATE INDEX idx_pages_title_trgm ON pages USING gin (title gin_trgm_ops);
 CREATE TABLE resources (
     id BIGSERIAL PRIMARY KEY,
     url TEXT NOT NULL,
-    content_hash CHAR(64) NOT NULL UNIQUE,
+    content_hash CHAR(64) NOT NULL,
     resource_type VARCHAR(20),
     file_path TEXT NOT NULL,
     file_size BIGINT,
