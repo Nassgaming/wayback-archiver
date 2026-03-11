@@ -24,6 +24,7 @@ Chrome + Tampermonkey ──HTTP POST──▶ Go Server ──▶ PostgreSQL (m
 
 ## Features
 
+- **High-fidelity replay** — CSSOM serialization, computed styles inlining, and anti-refresh protection reproduce pages as close to the original as possible
 - **Full-page capture** — HTML, CSS, JS, images, fonts; resource URLs are rewritten to local paths
 - **Cross-origin resource recovery** — server-side extraction and download of resources blocked by CORS
 - **Content-hash deduplication** — identical resources shared across pages are stored only once (SHA-256)
@@ -32,7 +33,7 @@ Chrome + Tampermonkey ──HTTP POST──▶ Go Server ──▶ PostgreSQL (m
 - **Dynamic content support** — captures the live DOM state; MutationObserver triggers one auto-update if significant changes occur after initial capture
 - **SPA-aware** — detects SPA navigation, resets capture state per route
 - **Anti-refresh protection** — archived pages are frozen: timers, WebSockets, and navigation APIs are neutralized
-- **Web UI** — responsive interface to browse, search (by URL/title), and replay archived pages
+- **Web UI** — responsive interface to browse, full-text search (page content, URL, and title), filter by date range, and replay archived pages
 - **RESTful API** — programmatic access to all archiving and query operations
 
 ## Prerequisites
