@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Wayback Test Page</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .info { background: #e3f2fd; }
+        .success { background: #c8e6c9; }
+        .error { background: #ffcdd2; }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>Wayback Archive Test Page</h1>
+    <p>This page is for testing the Wayback archiver script.</p>
+
+    <div id="status"></div>
+
+    <button onclick="testArchive()">Test Archive Now</button>
+    <button onclick="window.close()">Close Tab</button>
+
+    <h2>Instructions:</h2>
+    <ol>
+        <li>Make sure Tampermonkey script is installed and enabled</li>
+        <li>Open browser console (F12) to see logs</li>
+        <li>Wait 3 seconds for auto-capture to prepare</li>
+        <li>Click "Close Tab" or close this tab manually</li>
+        <li>Check server logs for POST /api/archive request</li>
+    </ol>
+
+    <script>
+        const statusDiv = document.getElementById('status');
+
+        function log(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `status ${type}`;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            statusDiv.appendChild(div);
+            console.log(message);
+        }
+
+        function testArchive() {
+            log('Testing archive functionality...', 'info');
+
+            // 测试发送请求
+            fetch('http://localhost:8080/api/archive', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    url: window.location.href,
+                    title: document.title,
+                    timestamp: Date.now(),
+                    html: document.documentElement.outerHTML,
+                    resources: []
+                })
+            })
+            .then(response => {
+                if (response.ok) {
+                    log('✓ Archive request successful!', 'success');
+                } else {
+                    log('✗ Archive request failed: ' + response.status, 'error');
+                }
+            })
+            .catch(error => {
+                log('✗ Network error: ' + error.message, 'error');
+            });
+        }
+
+        // 监听 Wayback 脚本的日志
+        const originalLog = console.log;
+        console.log = function(...args) {
+            if (args[0] && args[0].includes('[Wayback]')) {
+                log(args.join(' '), 'info');
+            }
+            originalLog.apply(console, args);
+        };
+
+        log('Test page loaded', 'info');
+        log('Waiting for Wayback script to initialize...', 'info');
+    </script>
+</body>
+</html>

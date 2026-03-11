@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Event Test Page</title>
+</head>
+<body>
+    <h1>Testing Wayback Events</h1>
+    <p>Open console to see logs</p>
+    <button onclick="window.close()">Close Window</button>
+    <button onclick="location.href='https://example.com'">Navigate Away</button>
+    
+    <script>
+        console.log('Page loaded');
+        
+        window.addEventListener('beforeunload', () => {
+            console.log('✓ beforeunload fired');
+        });
+        
+        window.addEventListener('pagehide', () => {
+            console.log('✓ pagehide fired');
+        });
+        
+        document.addEventListener('visibilitychange', () => {
+            console.log('✓ visibilitychange:', document.visibilityState);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+node_modules/
+.claude/
+CLAUDE.md
+
+# Test artifacts
+tests/root/*.log
+tests/root/*.png
+tests/server/*.log
+tests/server/*.png
+tests/browser/*.log
+
+# Data directories
+server/data/
+
+# Build artifacts
+*.exe
+server/wayback-server

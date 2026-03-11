@@ -1,0 +1,20 @@
+*.exe
+*.test
+*.out
+.env
+data/
+# Build artifacts
+server/wayback-server
+server
+
+# Logs
+*.log
+
+# Test artifacts
+test-*.png
+*-screenshot.png
+test/node_modules/
+test/package-lock.json
+
+# Scripts
+*.sh
