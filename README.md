@@ -6,9 +6,9 @@ English | [中文](README-zh.md)
 
 A self-hosted personal web archiving system that automatically captures and preserves web pages you visit in Chrome — HTML, CSS, JavaScript, images, and all. When the original page goes offline, you can still browse your archived copy with styles and layout intact.
 
-![index](./screenshot/index.png)  
-![x](./screenshot/x.png)   
-![v2ex](./screenshot/v2ex.png)  
+![index](./screenshot/index.webp)  
+![x](./screenshot/x.webp)   
+![v2ex](./screenshot/v2ex.webp)  
 
 ## How It Works
 

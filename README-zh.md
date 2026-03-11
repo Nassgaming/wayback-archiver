@@ -1,14 +1,14 @@
 # Wayback Archiver
 
-> *The Memory of Your Internet — Archive Everything You Browse.*
+> *我的互联网记忆 - 记录我浏览过的一切*
 
 [English](README.md) | 中文
 
 一个自托管的个人网页归档系统，自动捕获并保存你在 Chrome 中浏览过的网页 — HTML、CSS、JavaScript、图片等一应俱全。当原始网页无法访问时，你仍然可以通过归档副本还原当时的页面样式和内容。
 
-![index](./screenshot/index.png)  
-![x](./screenshot/x.png)   
-![v2ex](./screenshot/v2ex.png)  
+![index](./screenshot/index.webp)  
+![x](./screenshot/x.webp)   
+![v2ex](./screenshot/v2ex.webp)  
 
 ## 工作原理
 
