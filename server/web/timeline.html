@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WAYBACK // TIMELINE</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --color-bg: #000000;
+            --color-surface: #0a0a0a;
+            --color-border: #1a1a1a;
+            --color-text-primary: #e0e0e0;
+            --color-text-secondary: #808080;
+            --color-text-dim: #404040;
+            --color-accent: #00ff88;
+            --color-accent-dim: #00cc6a;
+            --color-cyan: #00d9ff;
+            --font-mono: 'JetBrains Mono', monospace;
+            --font-sans: 'Inter', sans-serif;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: var(--font-mono);
+            background: var(--color-bg);
+            color: var(--color-text-primary);
+            line-height: 1.5;
+            min-height: 100vh;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image:
+                linear-gradient(90deg, transparent 0%, rgba(0, 255, 136, 0.02) 50%, transparent 100%),
+                repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0, 255, 136, 0.03) 2px, rgba(0, 255, 136, 0.03) 4px);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 40px 24px;
+            position: relative;
+            z-index: 1;
+        }
+
+        .header {
+            margin-bottom: 40px;
+        }
+
+        .header a {
+            color: var(--color-accent);
+            text-decoration: none;
+            font-size: 13px;
+            opacity: 0.7;
+        }
+        .header a:hover { opacity: 1; }
+
+        .header h1 {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--color-accent);
+            margin: 16px 0 8px;
+            letter-spacing: 2px;
+        }
+
+        .target-url {
+            font-size: 13px;
+            color: var(--color-cyan);
+            word-break: break-all;
+            padding: 12px 16px;
+            background: rgba(0, 217, 255, 0.05);
+            border: 1px solid rgba(0, 217, 255, 0.15);
+            border-radius: 4px;
+            margin-top: 12px;
+        }
+
+        .target-url a {
+            color: var(--color-cyan);
+            text-decoration: none;
+        }
+        .target-url a:hover { text-decoration: underline; }
+
+        .stats {
+            font-size: 12px;
+            color: var(--color-text-secondary);
+            margin-top: 12px;
+        }
+
+        .timeline {
+            position: relative;
+            padding-left: 32px;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 8px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: linear-gradient(to bottom, var(--color-accent), var(--color-border));
+        }
+
+        .snapshot {
+            position: relative;
+            margin-bottom: 24px;
+            padding: 16px 20px;
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: 6px;
+            cursor: pointer;
+            transition: border-color 0.2s, background 0.2s;
+        }
+
+        .snapshot:hover {
+            border-color: var(--color-accent);
+            background: rgba(0, 255, 136, 0.03);
+        }
+
+        .snapshot::before {
+            content: '';
+            position: absolute;
+            left: -28px;
+            top: 22px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--color-accent);
+            border: 2px solid var(--color-bg);
+            z-index: 1;
+        }
+
+        .snapshot:first-child::before {
+            width: 14px;
+            height: 14px;
+            left: -29px;
+            top: 21px;
+            box-shadow: 0 0 8px rgba(0, 255, 136, 0.5);
+        }
+
+        .snapshot-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .snapshot-date {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--color-accent);
+        }
+
+        .snapshot-id {
+            font-size: 11px;
+            color: var(--color-text-dim);
+        }
+
+        .snapshot-title {
+            font-size: 13px;
+            color: var(--color-text-primary);
+            margin-top: 8px;
+            font-family: var(--font-sans);
+        }
+
+        .snapshot-meta {
+            display: flex;
+            gap: 16px;
+            margin-top: 8px;
+            font-size: 11px;
+            color: var(--color-text-secondary);
+            flex-wrap: wrap;
+        }
+
+        .snapshot-meta .label {
+            color: var(--color-text-dim);
+        }
+
+        .snapshot-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 3px;
+            font-size: 10px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .badge-latest {
+            background: rgba(0, 255, 136, 0.15);
+            color: var(--color-accent);
+            border: 1px solid rgba(0, 255, 136, 0.3);
+        }
+
+        .badge-changed {
+            background: rgba(0, 217, 255, 0.15);
+            color: var(--color-cyan);
+            border: 1px solid rgba(0, 217, 255, 0.3);
+        }
+
+        .empty {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--color-text-dim);
+            font-size: 14px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 60px 20px;
+            color: var(--color-text-secondary);
+            font-size: 13px;
+        }
+
+        .loading::after {
+            content: '...';
+            animation: dots 1.5s steps(4, end) infinite;
+        }
+
+        @keyframes dots {
+            0%, 20% { content: ''; }
+            40% { content: '.'; }
+            60% { content: '..'; }
+            80%, 100% { content: '...'; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <a href="/">← Back to Archives</a>
+            <h1>// TIMELINE</h1>
+            <div class="target-url" id="targetUrl"></div>
+            <div class="stats" id="stats"></div>
+        </div>
+        <div id="content">
+            <div class="loading">Loading snapshots</div>
+        </div>
+    </div>
+
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const targetUrl = urlParams.get('url');
+
+        if (!targetUrl) {
+            document.getElementById('content').innerHTML = '<div class="empty">No URL specified. Use ?url=... to view timeline.</div>';
+            document.getElementById('targetUrl').style.display = 'none';
+        } else {
+            document.getElementById('targetUrl').innerHTML = `<a href="${escapeHtml(targetUrl)}" target="_blank" rel="noopener">${escapeHtml(targetUrl)}</a>`;
+            document.title = `Timeline: ${targetUrl}`;
+            loadTimeline(targetUrl);
+        }
+
+        async function loadTimeline(url) {
+            try {
+                const response = await fetch(`/api/pages/timeline?url=${encodeURIComponent(url)}`);
+                if (!response.ok) throw new Error('Failed to load timeline');
+                const data = await response.json();
+
+                const snapshots = data.snapshots || [];
+                document.getElementById('stats').textContent = `${snapshots.length} snapshot${snapshots.length !== 1 ? 's' : ''} captured`;
+
+                if (snapshots.length === 0) {
+                    document.getElementById('content').innerHTML = '<div class="empty">No snapshots found for this URL.</div>';
+                    return;
+                }
+
+                renderTimeline(snapshots);
+            } catch (error) {
+                console.error('Timeline error:', error);
+                document.getElementById('content').innerHTML = '<div class="empty">Failed to load timeline.</div>';
+            }
+        }
+
+        function renderTimeline(snapshots) {
+            const container = document.getElementById('content');
+            let prevHash = null;
+
+            const html = '<div class="timeline">' + snapshots.map((snap, index) => {
+                const firstVisited = formatDate(snap.first_visited);
+                const lastVisited = formatDate(snap.last_visited);
+                const isMultipleVisits = snap.first_visited !== snap.last_visited;
+                const hashChanged = prevHash !== null && snap.content_hash !== prevHash;
+                prevHash = snap.content_hash;
+
+                const badges = [];
+                if (index === 0) badges.push('<span class="snapshot-badge badge-latest">Latest</span>');
+                if (hashChanged) badges.push('<span class="snapshot-badge badge-changed">Content Changed</span>');
+
+                return `
+                    <div class="snapshot" onclick="window.open('/view/${snap.id}', '_blank')">
+                        <div class="snapshot-header">
+                            <div>
+                                <span class="snapshot-date">${firstVisited}</span>
+                                ${badges.join(' ')}
+                            </div>
+                            <span class="snapshot-id">#${snap.id}</span>
+                        </div>
+                        <div class="snapshot-title">${escapeHtml(snap.title || 'Untitled')}</div>
+                        <div class="snapshot-meta">
+                            <span><span class="label">First seen:</span> ${firstVisited}</span>
+                            ${isMultipleVisits ? `<span><span class="label">Last seen:</span> ${lastVisited}</span>` : ''}
+                            <span><span class="label">Hash:</span> ${snap.content_hash.substring(0, 12)}...</span>
+                        </div>
+                    </div>
+                `;
+            }).join('') + '</div>';
+
+            container.innerHTML = html;
+        }
+
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>

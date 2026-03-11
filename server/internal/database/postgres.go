@@ -428,6 +428,64 @@ func (db *DB) UpdatePageContent(id int64, htmlPath, contentHash, title string) e
 	return err
 }
 
+// GetPagesByURL 获取同一 URL 的所有快照（按时间倒序）
+func (db *DB) GetPagesByURL(pageURL string) ([]models.Page, error) {
+	rows, err := db.conn.Query(
+		"SELECT id, url, title, captured_at, html_path, content_hash, first_visited, last_visited, created_at FROM pages WHERE url = $1 ORDER BY first_visited DESC",
+		pageURL,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var pages []models.Page
+	for rows.Next() {
+		var p models.Page
+		if err := rows.Scan(&p.ID, &p.URL, &p.Title, &p.CapturedAt, &p.HTMLPath, &p.ContentHash, &p.FirstVisited, &p.LastVisited, &p.CreatedAt); err != nil {
+			return nil, err
+		}
+		pages = append(pages, p)
+	}
+	return pages, nil
+}
+
+// GetSnapshotNeighbors 获取某个快照的前后快照（用于导航）
+func (db *DB) GetSnapshotNeighbors(pageURL string, currentID int64) (prev *models.Page, next *models.Page, total int, err error) {
+	// 获取总数
+	err = db.conn.QueryRow("SELECT COUNT(*) FROM pages WHERE url = $1", pageURL).Scan(&total)
+	if err != nil {
+		return
+	}
+
+	// 前一个快照（比当前更早）
+	var p models.Page
+	err = db.conn.QueryRow(
+		"SELECT id, url, title, captured_at, html_path, content_hash, first_visited, last_visited, created_at FROM pages WHERE url = $1 AND first_visited < (SELECT first_visited FROM pages WHERE id = $2) ORDER BY first_visited DESC LIMIT 1",
+		pageURL, currentID,
+	).Scan(&p.ID, &p.URL, &p.Title, &p.CapturedAt, &p.HTMLPath, &p.ContentHash, &p.FirstVisited, &p.LastVisited, &p.CreatedAt)
+	if err == nil {
+		prev = &p
+	} else if err != sql.ErrNoRows {
+		return
+	}
+	err = nil
+
+	// 后一个快照（比当前更新）
+	var n models.Page
+	err = db.conn.QueryRow(
+		"SELECT id, url, title, captured_at, html_path, content_hash, first_visited, last_visited, created_at FROM pages WHERE url = $1 AND first_visited > (SELECT first_visited FROM pages WHERE id = $2) ORDER BY first_visited ASC LIMIT 1",
+		pageURL, currentID,
+	).Scan(&n.ID, &n.URL, &n.Title, &n.CapturedAt, &n.HTMLPath, &n.ContentHash, &n.FirstVisited, &n.LastVisited, &n.CreatedAt)
+	if err == nil {
+		next = &n
+	} else if err != sql.ErrNoRows {
+		return
+	}
+	err = nil
+	return
+}
+
 // DeletePageResources 删除页面资源关联（不删除资源本身）
 func (db *DB) DeletePageResources(pageID int64) error {
 	_, err := db.conn.Exec("DELETE FROM page_resources WHERE page_id = $1", pageID)

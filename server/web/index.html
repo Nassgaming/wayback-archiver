@@ -353,6 +353,24 @@
             gap: 8px;
         }
 
+        .timeline-btn {
+            background: transparent;
+            border: 1px solid var(--color-border);
+            color: var(--color-text-dim);
+            padding: 4px 12px;
+            font-size: 0.75rem;
+            font-family: var(--font-mono);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            white-space: nowrap;
+        }
+
+        .timeline-btn:hover {
+            border-color: var(--color-cyan);
+            color: var(--color-cyan);
+            background: rgba(0, 217, 255, 0.1);
+        }
+
         .delete-btn {
             background: transparent;
             border: 1px solid var(--color-border);
@@ -656,6 +674,7 @@
                                 <span class="page-id">#${page.id}</span>
                             </div>
                             <div class="page-actions">
+                                <button class="timeline-btn" onclick="openTimeline(event, '${escapeHtml(page.url)}')">Timeline</button>
                                 <button class="delete-btn" data-page-id="${page.id}" onclick="deletePage(event, ${page.id})">Delete</button>
                             </div>
                         </div>
@@ -680,13 +699,18 @@
             document.querySelectorAll('.page-item').forEach(item => {
                 item.addEventListener('click', (e) => {
                     // Don't navigate if clicking on the original URL link or delete button
-                    if (e.target.closest('.page-url') || e.target.closest('.delete-btn')) {
+                    if (e.target.closest('.page-url') || e.target.closest('.delete-btn') || e.target.closest('.timeline-btn')) {
                         return;
                     }
                     const archiveId = item.getAttribute('data-archive-id');
                     window.open(`/view/${archiveId}`, '_blank');
                 });
             });
+        }
+
+        function openTimeline(event, pageUrl) {
+            event.stopPropagation();
+            window.open(`/timeline?url=${encodeURIComponent(pageUrl)}`, '_blank');
         }
 
         async function deletePage(event, pageId) {

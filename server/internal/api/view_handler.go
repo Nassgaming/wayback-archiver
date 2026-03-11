@@ -23,6 +23,9 @@ func (h *Handler) ViewPage(c *gin.Context) {
 		return
 	}
 
+	// 获取快照邻居信息（用于导航）
+	prev, next, snapshotTotal, _ := h.db.GetSnapshotNeighbors(page.URL, page.ID)
+
 	// 读取 HTML 文件（已经包含重写后的资源路径）
 	htmlPath := filepath.Join(h.dataDir, page.HTMLPath)
 	htmlContent, err := os.ReadFile(htmlPath)
@@ -75,7 +78,7 @@ func (h *Handler) ViewPage(c *gin.Context) {
 	modifiedHTML = fixNestedButtons(modifiedHTML)
 
 	// 注入归档信息栏
-	modifiedHTML = injectArchiveHeader(modifiedHTML, page)
+	modifiedHTML = injectArchiveHeader(modifiedHTML, page, prev, next, snapshotTotal)
 
 	// 设置安全响应头（禁用所有脚本）
 	c.Header("X-Frame-Options", "SAMEORIGIN")
