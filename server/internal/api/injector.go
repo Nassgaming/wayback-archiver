@@ -70,6 +70,17 @@ func injectArchiveHeader(html string, page *models.Page) string {
 	@media (max-width: 768px) {
 		body { margin-top: 120px !important; }
 	}
+	/* SPA 框架常用 height:100%% 配合 JS 滚动，静态模式下会截断内容 */
+	html, body, #app, #root, #__next, #__nuxt {
+		height: auto !important;
+		min-height: 100%% !important;
+		overflow: visible !important;
+	}
+	/* 修复 flex 容器 height:100%% 截断内容 */
+	#app > div, #root > div, #__next > div, #__nuxt > div {
+		height: auto !important;
+		min-height: 100%% !important;
+	}
 </style>
 `, escapeHTML(page.URL), capturedTime)
 
