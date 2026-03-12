@@ -174,8 +174,9 @@ data/
 ├── html/                     # HTML snapshots, organized by date
 │   └── 2026/03/09/
 │       └── <timestamp>_<hash>.html
-├── logs/                     # Server logs, rotated daily (7-day retention)
-│   └── wayback-2026-03-12.log
+├── logs/                     # Server logs, rotated by size (10MB) and date (7-day retention)
+│   ├── wayback-2026-03-12.001.log
+│   └── wayback-2026-03-12.002.log
 └── resources/                # Deduplicated static resources
     └── ab/cd/
         └── <sha256>.css

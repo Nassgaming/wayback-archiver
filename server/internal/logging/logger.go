@@ -19,15 +19,19 @@ const (
 	fileSuffix    = ".log"
 	dateFormat    = "2006-01-02"
 	retentionDays = 7
+	maxLogSize    = 10 * 1024 * 1024 // 10MB per file
 )
 
 // Logger manages log file rotation and cleanup.
 type Logger struct {
-	dir     string
-	mu      sync.Mutex
-	file    *os.File
-	curDate string
-	stopCh  chan struct{}
+	dir      string
+	mu       sync.Mutex
+	file     *os.File
+	curDate  string
+	curSeq   int
+	curSize  int64
+	stopCh   chan struct{}
+	writer   io.Writer
 }
 
 // Setup initializes the logging system: creates log dir, opens today's
@@ -72,7 +76,24 @@ func (l *Logger) rotate() error {
 	defer l.mu.Unlock()
 
 	today := time.Now().Format(dateFormat)
-	if today == l.curDate && l.file != nil {
+
+	// Check if we need to rotate due to date change or size limit
+	needRotate := false
+	if today != l.curDate {
+		// New day, reset sequence
+		l.curDate = today
+		l.curSeq = 1
+		needRotate = true
+	} else if l.file != nil && l.curSize >= maxLogSize {
+		// Same day but file too large, increment sequence
+		l.curSeq++
+		needRotate = true
+	} else if l.file == nil {
+		// No file open yet
+		needRotate = true
+	}
+
+	if !needRotate {
 		return nil
 	}
 
@@ -80,22 +101,66 @@ func (l *Logger) rotate() error {
 		l.file.Close()
 	}
 
-	filename := filepath.Join(l.dir, filePrefix+today+fileSuffix)
+	// Find next available sequence number for today
+	for {
+		filename := l.getFilename(today, l.curSeq)
+		info, err := os.Stat(filename)
+		if os.IsNotExist(err) {
+			// File doesn't exist, use this sequence
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("stat log file: %w", err)
+		}
+		// File exists, check if it's under size limit
+		if info.Size() < maxLogSize {
+			// Can append to this file
+			l.curSize = info.Size()
+			break
+		}
+		// File is full, try next sequence
+		l.curSeq++
+	}
+
+	filename := l.getFilename(today, l.curSeq)
 	f, err := os.OpenFile(filename, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
 		return fmt.Errorf("open log file: %w", err)
 	}
 
 	l.file = f
-	l.curDate = today
+
+	// Create a writer that tracks size
+	l.writer = &sizeTrackingWriter{
+		writer: f,
+		size:   &l.curSize,
+	}
 
 	// Redirect stdlib log and gin to both stdout and file
-	mw := io.MultiWriter(os.Stdout, f)
+	mw := io.MultiWriter(os.Stdout, l.writer)
 	log.SetOutput(mw)
 	gin.DefaultWriter = mw
-	gin.DefaultErrorWriter = io.MultiWriter(os.Stderr, f)
+	gin.DefaultErrorWriter = io.MultiWriter(os.Stderr, l.writer)
 
 	return nil
+}
+
+func (l *Logger) getFilename(date string, seq int) string {
+	return filepath.Join(l.dir, fmt.Sprintf("%s%s.%03d%s", filePrefix, date, seq, fileSuffix))
+}
+
+// sizeTrackingWriter wraps an io.Writer and tracks bytes written
+type sizeTrackingWriter struct {
+	writer io.Writer
+	size   *int64
+}
+
+func (w *sizeTrackingWriter) Write(p []byte) (n int, err error) {
+	n, err = w.writer.Write(p)
+	if n > 0 {
+		*w.size += int64(n)
+	}
+	return
 }
 
 // cleanup removes log files older than retentionDays.
@@ -113,8 +178,13 @@ func (l *Logger) cleanup() {
 		if !strings.HasPrefix(name, filePrefix) || !strings.HasSuffix(name, fileSuffix) {
 			continue
 		}
+		// Extract date from filename: wayback-2026-03-12.001.log -> 2026-03-12
 		dateStr := strings.TrimPrefix(name, filePrefix)
 		dateStr = strings.TrimSuffix(dateStr, fileSuffix)
+		// Remove sequence number: 2026-03-12.001 -> 2026-03-12
+		if idx := strings.LastIndex(dateStr, "."); idx > 0 {
+			dateStr = dateStr[:idx]
+		}
 		t, err := time.Parse(dateFormat, dateStr)
 		if err != nil {
 			continue
@@ -132,6 +202,10 @@ func (l *Logger) cleanup() {
 
 // backgroundLoop handles daily rotation and cleanup.
 func (l *Logger) backgroundLoop() {
+	// Check for size-based rotation every 10 seconds
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
 	for {
 		now := time.Now()
 		// Next midnight
@@ -139,7 +213,13 @@ func (l *Logger) backgroundLoop() {
 		timer := time.NewTimer(next.Sub(now))
 
 		select {
+		case <-ticker.C:
+			// Check if current file needs rotation due to size
+			if err := l.rotate(); err != nil {
+				log.Printf("[logging] rotation failed: %v", err)
+			}
 		case <-timer.C:
+			// Midnight rotation
 			if err := l.rotate(); err != nil {
 				log.Printf("[logging] rotation failed: %v", err)
 			}
@@ -174,8 +254,12 @@ func (l *Logger) ListLogFiles() ([]LogFileInfo, error) {
 		if err != nil {
 			continue
 		}
+		// Extract date: wayback-2026-03-12.001.log -> 2026-03-12
 		dateStr := strings.TrimPrefix(name, filePrefix)
 		dateStr = strings.TrimSuffix(dateStr, fileSuffix)
+		if idx := strings.LastIndex(dateStr, "."); idx > 0 {
+			dateStr = dateStr[:idx]
+		}
 		files = append(files, LogFileInfo{
 			Name: name,
 			Size: info.Size(),
@@ -183,8 +267,9 @@ func (l *Logger) ListLogFiles() ([]LogFileInfo, error) {
 		})
 	}
 
+	// Sort by filename (which includes date and sequence)
 	sort.Slice(files, func(i, j int) bool {
-		return files[i].Date > files[j].Date
+		return files[i].Name > files[j].Name
 	})
 	return files, nil
 }
@@ -200,6 +285,22 @@ func (l *Logger) ReadLogFile(filename string, tail int) (string, error) {
 	}
 
 	path := filepath.Join(l.dir, filename)
+
+	// Check for symlink to prevent symlink attacks
+	info, err := os.Lstat(path)
+	if err != nil {
+		return "", err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("symlink not allowed")
+	}
+
+	// Limit file size to prevent OOM attacks (now per-file limit is 10MB, so this is extra safety)
+	const maxReadSize = 50 * 1024 * 1024 // 50MB
+	if info.Size() > maxReadSize {
+		return "", fmt.Errorf("log file too large")
+	}
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", err
@@ -208,6 +309,9 @@ func (l *Logger) ReadLogFile(filename string, tail int) (string, error) {
 	content := string(data)
 	if tail <= 0 {
 		tail = 500
+	}
+	if tail > 10000 { // Limit max lines to prevent excessive memory usage
+		tail = 10000
 	}
 
 	lines := strings.Split(content, "\n")

@@ -174,8 +174,9 @@ data/
 ├── html/                     # HTML 快照，按日期组织
 │   └── 2026/03/09/
 │       └── <timestamp>_<hash>.html
-├── logs/                     # 服务器日志，按天轮转（保留 7 天）
-│   └── wayback-2026-03-12.log
+├── logs/                     # 服务器日志，按大小（10MB）和日期轮转（保留 7 天）
+│   ├── wayback-2026-03-12.001.log
+│   └── wayback-2026-03-12.002.log
 └── resources/                # 去重后的静态资源
     └── ab/cd/
         └── <sha256>.css
