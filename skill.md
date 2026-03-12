@@ -1,16 +1,26 @@
-# Wayback Archiver - AI Agent Skill
+---
+name: wayback
+description: Query and explore the Wayback Archiver personal web archiving system
+---
 
-## Overview
+# Wayback Archiver
 
-Wayback Archiver is a self-hosted personal web archiving system that captures and preserves web pages with full fidelity — HTML, CSS, JavaScript, images, fonts, and all resources. This skill enables AI agents to autonomously install, configure, and query the Wayback Archiver read-only API.
-
-**Purpose**: Archive web pages you browse in Chrome and replay them offline when the original goes down.
+Wayback Archiver is a self-hosted personal web archiving system that captures and preserves web pages with full fidelity — HTML, CSS, JavaScript, images, fonts, and all resources.
 
 **Repository**: https://github.com/icodeface/wayback-archiver
 
+## When to use
+
+Use this skill when the user wants to:
+- Search archived web pages
+- View snapshots of a specific URL
+- List recent archives or filter by date range
+- Get details about a specific archived page
+- Explore the archiving system's data
+
 ## Prerequisites
 
-Before installation, ensure these are available:
+Before using this skill, ensure the Wayback Archiver server is running:
 
 - **Git**
 - **Go** 1.21+
@@ -18,49 +28,20 @@ Before installation, ensure these are available:
 - **PostgreSQL** 14+
 - **Chrome** with [Tampermonkey](https://www.tampermonkey.net/) extension
 
-## Installation
+## Quick Start
 
-### 1. Clone the Repository
+### 1. Clone and Setup
 
 ```bash
 git clone https://github.com/icodeface/wayback-archiver.git
 cd wayback-archiver
-```
 
-### 2. Database Setup
-
-```bash
 # Create database
 createdb -U postgres wayback
-
-# Initialize schema
 psql -U postgres wayback < server/init_db.sql
 ```
 
-### 3. Server Configuration
-
-Create `.env` file in `server/` directory:
-
-```bash
-# Database
-DB_HOST=localhost
-DB_PORT=5432
-DB_USER=postgres
-DB_PASSWORD=
-DB_NAME=wayback
-DB_SSLMODE=disable
-
-# Server
-SERVER_PORT=8080
-
-# Storage
-DATA_DIR=./data
-
-# Authentication (optional, disabled when empty)
-AUTH_PASSWORD=
-```
-
-### 4. Start Server
+### 2. Start Server
 
 ```bash
 cd server
@@ -68,17 +49,9 @@ go build -o wayback-server ./cmd/server
 ./wayback-server
 ```
 
-Server starts at `http://localhost:8080` by default.
+Server runs at `http://localhost:8080` by default.
 
-**Proxy Support** (if needed for downloading external resources):
-
-```bash
-export http_proxy=http://127.0.0.1:7897
-export https_proxy=http://127.0.0.1:7897
-./wayback-server
-```
-
-### 5. Install Userscript
+### 3. Install Browser Script
 
 ```bash
 cd browser
@@ -86,153 +59,56 @@ npm install
 npm run build
 ```
 
-Then install `browser/dist/wayback.user.js` in Tampermonkey.
+Install `browser/dist/wayback.user.js` in Tampermonkey.
 
-## API Reference
+## API Usage
 
 Base URL: `http://localhost:8080`
 
-### Authentication
+### Authentication (Optional)
 
-HTTP Basic Auth (optional, controlled by `AUTH_PASSWORD` env var):
+When `AUTH_PASSWORD` is set, use HTTP Basic Auth:
 - **Username**: `wayback`
-- **Password**: value of `AUTH_PASSWORD`
-- **Header**: `Authorization: Basic <base64(wayback:password)>`
-
-When `AUTH_PASSWORD` is empty, authentication is disabled.
+- **Password**: `$AUTH_PASSWORD`
 
 ### Endpoints
 
-#### 1. List Pages
+#### Search Pages
 
-**GET** `/api/pages`
-
-List all archived pages with pagination and date filtering.
-
-**Query Parameters**:
-- `limit` (optional): Items per page (default: 100, max: 1000)
-- `offset` (optional): Pagination offset (default: 0)
-- `from` (optional): Start date filter (format: `2006-01-02`)
-- `to` (optional): End date filter (format: `2006-01-02`)
-
-**Response**:
-```json
-{
-  "pages": [
-    {
-      "id": 123,
-      "url": "https://example.com",
-      "title": "Example Page",
-      "captured_at": "2026-03-12T10:30:00Z",
-      "html_path": "data/html/2026/03/12/1710241800_abc123.html",
-      "content_hash": "sha256_hash",
-      "first_visited": "2026-03-12T10:30:00Z",
-      "last_visited": "2026-03-12T10:30:00Z",
-      "created_at": "2026-03-12T10:30:00Z"
-    }
-  ],
-  "total": 1,
-  "limit": 100,
-  "offset": 0
-}
+```bash
+curl "http://localhost:8080/api/search?q=$KEYWORD"
 ```
 
-#### 4. Get Page Details
+#### List All Pages
 
-**GET** `/api/pages/:id`
-
-Retrieve details of a specific archived page.
-
-**Response**:
-```json
-{
-  "id": 123,
-  "url": "https://example.com",
-  "title": "Example Page",
-  "captured_at": "2026-03-12T10:30:00Z",
-  "html_path": "data/html/2026/03/12/1710241800_abc123.html",
-  "content_hash": "sha256_hash",
-  "first_visited": "2026-03-12T10:30:00Z",
-  "last_visited": "2026-03-12T10:30:00Z",
-  "created_at": "2026-03-12T10:30:00Z"
-}
+```bash
+curl "http://localhost:8080/api/pages?limit=100&offset=0"
 ```
 
-#### 5. Search Pages
+#### Get Page Details
 
-**GET** `/api/search`
-
-Full-text search across page URLs, titles, and content.
-
-**Query Parameters**:
-- `q` (required): Search keyword
-- `from` (optional): Start date filter (format: `2006-01-02`)
-- `to` (optional): End date filter (format: `2006-01-02`)
-
-**Response**:
-```json
-[
-  {
-    "id": 123,
-    "url": "https://example.com",
-    "title": "Example Page",
-    "captured_at": "2026-03-12T10:30:00Z",
-    "html_path": "data/html/2026/03/12/1710241800_abc123.html",
-    "content_hash": "sha256_hash",
-    "first_visited": "2026-03-12T10:30:00Z",
-    "last_visited": "2026-03-12T10:30:00Z",
-    "created_at": "2026-03-12T10:30:00Z"
-  }
-]
+```bash
+curl "http://localhost:8080/api/pages/$PAGE_ID"
 ```
 
-#### 6. Get Page Timeline
+#### Get Timeline for URL
 
-**GET** `/api/pages/timeline`
-
-Retrieve all snapshots of a specific URL (version history).
-
-**Query Parameters**:
-- `url` (required): The URL to query
-
-**Response**:
-```json
-{
-  "url": "https://example.com",
-  "snapshots": [
-    {
-      "id": 123,
-      "url": "https://example.com",
-      "title": "Example Page",
-      "captured_at": "2026-03-12T10:30:00Z",
-      "html_path": "data/html/2026/03/12/1710241800_abc123.html",
-      "content_hash": "sha256_hash",
-      "first_visited": "2026-03-12T10:30:00Z",
-      "last_visited": "2026-03-12T10:30:00Z",
-      "created_at": "2026-03-12T10:30:00Z"
-    }
-  ],
-  "total": 1
-}
+```bash
+curl "http://localhost:8080/api/pages/timeline?url=$ENCODED_URL"
 ```
 
-#### 5. View Archived Page
+#### Filter by Date Range
 
-**GET** `/view/:id`
+```bash
+curl "http://localhost:8080/api/pages?from=2026-03-01&to=2026-03-12"
+```
 
-Replay an archived page in the browser (HTML response).
+#### View Archived Page
 
-#### 6. Timeline UI
-
-**GET** `/timeline?url=<encoded_url>`
-
-Visual timeline page showing all snapshots of a URL.
-
-#### 7. Robots.txt
-
-**GET** `/robots.txt`
-
-Returns robots.txt that blocks major search engines and AI crawlers while allowing other user agents.
+Open in browser:
+```
+http://localhost:8080/view/$PAGE_ID
+```
 
 ## Data Models
 
@@ -301,50 +177,37 @@ cd server && go test ./... -v
 cd tests/server && node test_update_feature.js
 ```
 
-## Common Use Cases
+## Troubleshooting
 
-### 1. Search Archived Pages
+| Issue | Solution |
+|-------|----------|
+| Server won't start | Check PostgreSQL is running and database exists |
+| Pages not archiving | Verify Tampermonkey script is enabled and server is reachable |
+| Missing resources | Check proxy settings if behind corporate firewall |
+| Authentication errors | Verify `AUTH_PASSWORD` env var matches your curl credentials |
 
-```bash
-curl "http://localhost:8080/api/search?q=example"
-```
+## Configuration
 
-### 2. Get All Snapshots of a URL
-
-```bash
-curl "http://localhost:8080/api/pages/timeline?url=https://example.com"
-```
-
-### 3. List Recent Archives
+Create `.env` file in `server/` directory:
 
 ```bash
-curl "http://localhost:8080/api/pages?limit=10&offset=0"
+# Database
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=
+DB_NAME=wayback
+DB_SSLMODE=disable
+
+# Server
+SERVER_PORT=8080
+
+# Storage
+DATA_DIR=./data
+
+# Authentication (optional)
+AUTH_PASSWORD=
 ```
-
-### 4. Filter by Date Range
-
-```bash
-curl "http://localhost:8080/api/pages?from=2026-03-01&to=2026-03-12"
-```
-
-### 5. Get Page Details
-
-```bash
-curl "http://localhost:8080/api/pages/123"
-```
-
-### 6. With Authentication
-
-```bash
-curl -u wayback:your_password "http://localhost:8080/api/pages?limit=10"
-```
-
-## Limitations
-
-- Cross-origin resources may fail due to server-side 403/404
-- Dynamically injected scripts (loaded via JS at runtime) may not be captured
-- Tracking pixels and analytics URLs with dynamic parameters not preserved
-- Large media files consume significant storage
 
 ## License
 
