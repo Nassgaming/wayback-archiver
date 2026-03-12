@@ -48,60 +48,32 @@ func injectArchiveHeader(html string, page *models.Page, prev *models.Page, next
 	top: 0;
 	left: 0;
 	right: 0;
+	height: 48px;
 	background: linear-gradient(135deg, #667eea 0%%, #764ba2 100%%);
 	color: white;
-	padding: 12px 20px;
+	padding: 0 20px;
 	box-shadow: 0 2px 8px rgba(0,0,0,0.15);
 	z-index: 999999;
 	font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-	font-size: 14px;
-	line-height: 1.5;
+	font-size: 13px;
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
-	flex-wrap: wrap;
-	gap: 12px;
+	gap: 16px;
+	overflow: hidden;
 ">
-	<div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
-		<span style="
-			background: rgba(255,255,255,0.2);
-			padding: 4px 12px;
-			border-radius: 4px;
-			font-size: 12px;
-			font-weight: 600;
-			text-transform: uppercase;
-			letter-spacing: 0.5px;
-		">📚 Archived Snapshot</span>
-		<div style="display: flex; flex-direction: column; gap: 4px;">
-			<div style="font-size: 13px; opacity: 0.95;">
-				<strong>URL:</strong> <span style="font-family: monospace;">%s</span>
-			</div>
-			<div style="font-size: 12px; opacity: 0.85;">
-				<strong>Captured:</strong> %s | <strong>Mode:</strong> Static (JavaScript disabled)
-			</div>
-		</div>
+	<div style="display:flex;align-items:center;gap:12px;min-width:0;flex:1;overflow:hidden;">
+		<span style="background:rgba(255,255,255,0.2);padding:3px 10px;border-radius:4px;font-size:11px;font-weight:600;letter-spacing:0.5px;white-space:nowrap;">📚 ARCHIVED</span>
+		<a href="%s" style="color:white;text-decoration:none;font-family:monospace;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;opacity:0.95;" title="%s">%s</a>
+		<span style="font-size:11px;opacity:0.7;white-space:nowrap;">%s</span>
 	</div>
-	<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+	<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
 		%s
-		<a href="/" style="
-			color: white;
-			text-decoration: none;
-			padding: 6px 16px;
-			border: 1px solid rgba(255,255,255,0.3);
-			border-radius: 4px;
-			transition: all 0.2s;
-			font-size: 13px;
-			background: rgba(255,255,255,0.1);
-		">
-			← Back to Archives
-		</a>
+		<a href="/" style="color:white;text-decoration:none;padding:4px 12px;border:1px solid rgba(255,255,255,0.3);border-radius:4px;font-size:12px;background:rgba(255,255,255,0.1);white-space:nowrap;">← Archives</a>
 	</div>
 </div>
 <style>
-	body { margin-top: 80px !important; }
-	@media (max-width: 768px) {
-		body { margin-top: 120px !important; }
-	}
+	body { margin-top: 48px !important; }
 	/* SPA 框架常用 height:100%% 配合 JS 滚动，静态模式下会截断内容 */
 	html, body, #app, #root, #__next, #__nuxt {
 		height: auto !important;
@@ -123,7 +95,7 @@ func injectArchiveHeader(html string, page *models.Page, prev *models.Page, next
 		transform: none !important;
 	}
 </style>
-`, escapeHTML(page.URL), capturedTime, navHTML)
+`, page.URL, escapeHTML(page.URL), escapeHTML(page.URL), capturedTime, navHTML)
 
 	// 在 <body> 标签后注入
 	if bodyTagRe.MatchString(html) {
