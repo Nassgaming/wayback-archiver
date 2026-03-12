@@ -49,8 +49,12 @@ func (h *Handler) ViewPage(c *gin.Context) {
 	modifiedHTML = noscriptTagRe.ReplaceAllString(modifiedHTML, "")
 
 	// 移除内联事件处理器
-	eventHandlerRe := regexp.MustCompile(`(?i)\s+on\w+\s*=\s*["'][^"']*["']`)
-	modifiedHTML = eventHandlerRe.ReplaceAllString(modifiedHTML, "")
+	// 使用两个独立正则分别处理双引号和单引号包裹的属性值，
+	// 避免 [^"']* 在遇到嵌套引号时提前终止匹配（如 onclick="window.open('...')"）
+	eventHandlerDQ := regexp.MustCompile(`(?i)\s+on\w+\s*=\s*"[^"]*"`)
+	eventHandlerSQ := regexp.MustCompile(`(?i)\s+on\w+\s*=\s*'[^']*'`)
+	modifiedHTML = eventHandlerDQ.ReplaceAllString(modifiedHTML, "")
+	modifiedHTML = eventHandlerSQ.ReplaceAllString(modifiedHTML, "")
 
 	// 移除 javascript: 协议的链接
 	jsProtocolRe := regexp.MustCompile(`(?i)href\s*=\s*["']javascript:[^"']*["']`)
@@ -67,19 +71,30 @@ func (h *Handler) ViewPage(c *gin.Context) {
 	// 早期归档的页面 srcset 未被重写，在渲染时补偿处理
 	modifiedHTML = fixUnrewrittenSrcset(modifiedHTML)
 
+	// 解析 URL 提取主机名，用于站点专项修复的精确匹配
+	pageHost := ""
+	if parsedURL, err := url.Parse(page.URL); err == nil {
+		pageHost = parsedURL.Hostname()
+	}
+
 	// 针对 m-team 网站的专项修复
-	if strings.Contains(page.URL, "m-team.cc") {
+	if strings.HasSuffix(pageHost, "m-team.cc") {
 		modifiedHTML = fixMTeamLayout(modifiedHTML)
 	}
 
 	// 针对 X.com (Twitter) 的专项修复
-	if strings.Contains(page.URL, "x.com") || strings.Contains(page.URL, "twitter.com") {
+	if pageHost == "x.com" || pageHost == "www.x.com" || strings.HasSuffix(pageHost, "twitter.com") {
 		modifiedHTML = fixXcomLayout(modifiedHTML)
 	}
 
 	// 针对 OKX 网站的专项修复
-	if strings.Contains(page.URL, "okx.com") {
+	if strings.HasSuffix(pageHost, "okx.com") {
 		modifiedHTML = fixOKXLayout(modifiedHTML)
+	}
+
+	// 针对 GitHub 的专项修复
+	if strings.HasSuffix(pageHost, "github.com") {
+		modifiedHTML = fixGitHubLayout(modifiedHTML)
 	}
 
 	// 修复嵌套的 <button> 标签（HTML 规范不允许 button 嵌套 button）
@@ -543,6 +558,69 @@ func fixMTeamLayout(html string) string {
 	// 在 </head> 前注入
 	if idx := strings.Index(html, "</head>"); idx != -1 {
 		html = html[:idx] + mteamCSS + html[idx:]
+	}
+
+	return html
+}
+
+func fixGitHubLayout(html string) string {
+	// GitHub issue/PR 页面的布局修复
+	// 问题：
+	// 1. React app 容器 (.AkPdD) 使用 height:100%，在静态模式下只有视口高度
+	// 2. 评论区域使用虚拟滚动或绝对定位，导致评论之间有大量空白
+	// 3. __primerPortalRoot__ 的 tooltip 绝对定位在很远的位置，扩展页面高度
+	githubCSS := `<style>
+	/* 隐藏 GitHub 的 portal root（tooltips 在无 JS 时无法工作） */
+	#__primerPortalRoot__ { display: none !important; }
+
+	/* 修复 React app 主容器的高度问题 */
+	.AkPdD, .Box-sc-62in7e-0.AkPdD {
+		height: auto !important;
+		min-height: 100vh !important;
+	}
+
+	/* 修复 issue viewer 容器 */
+	[class*="issueViewerContainer"],
+	[class*="IssueViewer-module__issueViewerContainer"] {
+		height: auto !important;
+	}
+
+	/* 修复评论容器 */
+	[class*="commentsContainer"],
+	[class*="IssueViewer-module__commentsContainer"],
+	.react-comments-container {
+		height: auto !important;
+		min-height: 0 !important;
+	}
+
+	/* 修复虚拟滚动 timeline items 的定位问题（仅针对有 inline transform 的元素） */
+	/* 注意：不能用 [class*="TimelineItem"]，会误匹配 TimelineItem-avatar/badge/body 导致头像错位 */
+	[class*="TimelineRow"][style*="transform"],
+	[class*="TimelineRow"][style*="position: absolute"] {
+		position: static !important;
+		transform: none !important;
+	}
+
+	/* 修复 content 和 sidebar wrapper */
+	[class*="contentAndSidebarWrapper"] {
+		height: auto !important;
+	}
+
+	/* 修复 content area */
+	[class*="contentArea"] {
+		height: auto !important;
+	}
+
+	/* 修复 sidebar */
+	[class*="metadataSidebar"],
+	[class*="issueViewerMetadataPane"] {
+		height: auto !important;
+	}
+</style>`
+
+	// 在 </head> 前注入
+	if idx := strings.Index(html, "</head>"); idx != -1 {
+		html = html[:idx] + githubCSS + html[idx:]
 	}
 
 	return html
