@@ -190,6 +190,113 @@ func (r *URLRewriter) RewriteHTMLFast(html string) string {
 	// strings.NewReplacer 只能匹配 srcset="<单个URL>"，无法处理逗号分隔的多值
 	html = r.rewriteMultiValueSrcset(html)
 
+	// 7. 兜底：重写所有未被替换的绝对路径（如 /assets/...）
+	// 这些路径可能是动态生成的，或者在资源提取时被遗漏
+	// 将它们重写为归档路径格式，让服务器的 view handler 处理
+	if r.pageID > 0 && r.timestamp != "" {
+		html = r.rewriteUnmappedAbsolutePaths(html)
+	}
+
+	return html
+}
+
+// rewriteUnmappedAbsolutePaths 重写所有未被映射的绝对路径
+// 这是一个兜底机制，用于处理动态生成或遗漏的资源引用
+func (r *URLRewriter) rewriteUnmappedAbsolutePaths(html string) string {
+	// 必须有 baseURL 才能构建完整的归档路径
+	if r.baseURL == "" {
+		return html
+	}
+
+	parsed, err := url.Parse(r.baseURL)
+	if err != nil {
+		return html
+	}
+	baseHost := parsed.Scheme + "://" + parsed.Host
+
+	// 预编译正则（避免在闭包内重复编译）
+	// 绝对路径：以单个 / 开头，但不是 // 开头（协议相对 URL）
+	attrDQ := regexp.MustCompile(`(\s(?:src|href|poster|srcset))="(/[^"/][^"]*)"`)
+	attrSQ := regexp.MustCompile(`(\s(?:src|href|poster|srcset))='(/[^'/][^']*)'`)
+	protoRelDQ := regexp.MustCompile(`(\s(?:src|href|poster|srcset))="(//[^"]+)"`)
+	protoRelSQ := regexp.MustCompile(`(\s(?:src|href|poster|srcset))='(//[^']+)'`)
+	urlRe := regexp.MustCompile(`url\(["']?(/[^"')]+)["']?\)`)
+
+	// 1. 先处理协议相对 URL（如 //cdn.example.com/path）（双引号）
+	html = protoRelDQ.ReplaceAllStringFunc(html, func(match string) string {
+		sub := protoRelDQ.FindStringSubmatch(match)
+		if len(sub) < 3 {
+			return match
+		}
+		attr := sub[1]
+		p := sub[2]
+		if strings.HasPrefix(p, "//archive/") {
+			return match
+		}
+		// 协议相对 URL 补全为 https
+		localURL := fmt.Sprintf("/archive/%d/%smp_/https:%s", r.pageID, r.timestamp, p)
+		return attr + `="` + localURL + `"`
+	})
+
+	// 1b. 协议相对 URL（单引号）
+	html = protoRelSQ.ReplaceAllStringFunc(html, func(match string) string {
+		sub := protoRelSQ.FindStringSubmatch(match)
+		if len(sub) < 3 {
+			return match
+		}
+		attr := sub[1]
+		p := sub[2]
+		if strings.HasPrefix(p, "//archive/") {
+			return match
+		}
+		localURL := fmt.Sprintf("/archive/%d/%smp_/https:%s", r.pageID, r.timestamp, p)
+		return attr + `='` + localURL + `'`
+	})
+
+	// 2. 再处理绝对路径（以单个 / 开头）（双引号）
+	html = attrDQ.ReplaceAllStringFunc(html, func(match string) string {
+		sub := attrDQ.FindStringSubmatch(match)
+		if len(sub) < 3 {
+			return match
+		}
+		attr := sub[1]
+		p := sub[2]
+		if strings.HasPrefix(p, "/archive/") {
+			return match
+		}
+		localURL := fmt.Sprintf("/archive/%d/%smp_/%s", r.pageID, r.timestamp, baseHost+p)
+		return attr + `="` + localURL + `"`
+	})
+
+	// 2b. 绝对路径（单引号）
+	html = attrSQ.ReplaceAllStringFunc(html, func(match string) string {
+		sub := attrSQ.FindStringSubmatch(match)
+		if len(sub) < 3 {
+			return match
+		}
+		attr := sub[1]
+		p := sub[2]
+		if strings.HasPrefix(p, "/archive/") {
+			return match
+		}
+		localURL := fmt.Sprintf("/archive/%d/%smp_/%s", r.pageID, r.timestamp, baseHost+p)
+		return attr + `='` + localURL + `'`
+	})
+
+	// 3. 重写 url() 中的绝对路径
+	html = urlRe.ReplaceAllStringFunc(html, func(match string) string {
+		sub := urlRe.FindStringSubmatch(match)
+		if len(sub) < 2 {
+			return match
+		}
+		p := sub[1]
+		if strings.HasPrefix(p, "/archive/") {
+			return match
+		}
+		localURL := fmt.Sprintf("/archive/%d/%smp_/%s", r.pageID, r.timestamp, baseHost+p)
+		return `url("` + localURL + `")`
+	})
+
 	return html
 }
 
