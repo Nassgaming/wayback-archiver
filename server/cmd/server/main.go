@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -52,12 +53,44 @@ func main() {
 	// 初始化去重器
 	dedup := storage.NewDeduplicator(db, fileStorage)
 
+	// 清理被替换的旧版本 HTML 文件（启动时执行一次）
+	const htmlRetentionDays = 7 // 旧版本保留 7 天
+	log.Printf("Processing HTML deletion queue (retention: %d days)...", htmlRetentionDays)
+	if err := dedup.CleanupOldHTML(htmlRetentionDays); err != nil {
+		log.Printf("Warning: HTML cleanup failed: %v", err)
+	}
+
+	// 启动后台 goroutine 定期清理（每天午夜执行）
+	go func() {
+		for {
+			now := time.Now()
+			// 计算到下一个午夜的时间
+			next := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 1, 0, now.Location())
+			time.Sleep(next.Sub(now))
+
+			log.Printf("Running scheduled HTML deletion queue cleanup...")
+			if err := dedup.CleanupOldHTML(htmlRetentionDays); err != nil {
+				log.Printf("Warning: scheduled HTML cleanup failed: %v", err)
+			}
+		}
+	}()
+
 	// 初始化 API 处理器
 	handler := api.NewHandler(dedup, db, cfg.Storage.DataDir, logger)
 
 	// 设置 Gin
 	gin.SetMode(gin.ReleaseMode)
-	r := gin.Default()
+	r := gin.New()
+
+	// 添加 Recovery 中间件（处理 panic）
+	r.Use(gin.Recovery())
+
+	// 添加自定义日志中间件（请求到达时立即打印）
+	r.Use(func(c *gin.Context) {
+		log.Printf("[HTTP] %s %s from %s", c.Request.Method, c.Request.URL.Path, c.ClientIP())
+		c.Next()
+	})
+
 	api.SetupRoutes(r, handler, &cfg.Auth)
 
 	// 启动服务器
