@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"wayback/internal/api"
@@ -105,6 +106,43 @@ func main() {
 		log.Printf("[HTTP] %s %s from %s", c.Request.Method, c.Request.URL.Path, c.ClientIP())
 		c.Next()
 	})
+
+	// 添加请求解压缩中间件（始终启用，因为客户端可能发送压缩数据）
+	r.Use(func(c *gin.Context) {
+		if c.Request.Header.Get("Content-Encoding") == "gzip" {
+			gzip.DefaultDecompressHandle(c)
+			if c.IsAborted() {
+				// 只在失败时记录日志
+				log.Printf("[Decompression] Failed to decompress %s %s: %v", c.Request.Method, c.Request.URL.Path, c.Errors.Last())
+				return
+			}
+		}
+		c.Next()
+	})
+
+	// 添加响应压缩中间件（可通过 ENABLE_COMPRESSION=false 环境变量禁用）
+	if cfg.Server.EnableCompression {
+		compressionLevel := cfg.Server.CompressionLevel
+		if compressionLevel == -1 {
+			compressionLevel = gzip.DefaultCompression
+		}
+		log.Printf("Response compression enabled (level: %d)", compressionLevel)
+
+		// 排除已压缩的文件类型，避免浪费 CPU
+		r.Use(gzip.Gzip(
+			compressionLevel,
+			gzip.WithExcludedExtensions([]string{
+				".png", ".gif", ".jpeg", ".jpg", // 图片（默认已排除，这里显式声明）
+				".webp", ".svg", ".ico",         // 其他图片格式
+				".mp4", ".webm", ".avi",         // 视频
+				".mp3", ".ogg", ".wav",          // 音频
+				".zip", ".gz", ".tar", ".rar",   // 压缩包
+				".woff", ".woff2", ".ttf",       // 字体文件
+			}),
+		))
+	} else {
+		log.Println("Response compression disabled (request decompression still active)")
+	}
 
 	api.SetupRoutes(r, handler, &cfg.Auth, Version, BuildTime)
 

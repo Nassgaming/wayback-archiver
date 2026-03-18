@@ -1,17 +1,52 @@
 // Archiver - sends captured data to the server
 
+// pako is loaded via @require in Tampermonkey header
+declare const pako: any;
+
 import { CONFIG } from './config';
 import { CaptureData, ArchiveResponse } from './types';
+
+/**
+ * Compresses data using gzip and returns binary string for transmission.
+ * Returns both the compressed data and compression stats.
+ */
+function compressData(data: string): { compressed: string; originalSize: number; compressedSize: number } {
+  const originalSize = data.length;
+  const compressed = pako.gzip(data);
+  const compressedSize = compressed.length;
+
+  // Convert Uint8Array to binary string for GM_xmlhttpRequest
+  // Each character's charCode represents one byte
+  let binary = '';
+  for (let i = 0; i < compressed.length; i++) {
+    binary += String.fromCharCode(compressed[i]);
+  }
+
+  return { compressed: binary, originalSize, compressedSize };
+}
 
 /**
  * Sends the captured page data to the local archiving server.
  */
 export function sendToServer(captureData: CaptureData): Promise<ArchiveResponse> {
-  console.log('[Wayback] >>> Sending to server...');
+  const jsonData = JSON.stringify(captureData);
 
-  const headers: Record<string, string> = {
+  let data: string;
+  let headers: Record<string, string> = {
     'Content-Type': 'application/json'
   };
+
+  // Compress if enabled (recommended for remote deployments)
+  if (CONFIG.ENABLE_COMPRESSION) {
+    const { compressed, originalSize, compressedSize } = compressData(jsonData);
+    const compressionRatio = ((1 - compressedSize / originalSize) * 100).toFixed(1);
+    console.log(`[Wayback] >>> Sending to server (${originalSize} bytes → ${compressedSize} bytes, ${compressionRatio}% reduction)...`);
+    data = compressed;
+    headers['Content-Encoding'] = 'gzip';
+  } else {
+    console.log(`[Wayback] >>> Sending to server (${jsonData.length} bytes, uncompressed)...`);
+    data = jsonData;
+  }
 
   // Add Basic Auth header if password is configured
   if (CONFIG.AUTH_PASSWORD) {
@@ -24,7 +59,8 @@ export function sendToServer(captureData: CaptureData): Promise<ArchiveResponse>
       method: 'POST',
       url: CONFIG.SERVER_URL,
       headers,
-      data: JSON.stringify(captureData),
+      data: data,
+      binary: CONFIG.ENABLE_COMPRESSION,
       timeout: CONFIG.REQUEST_TIMEOUT,
       onload: (response) => {
         if (response.status === 200) {
@@ -57,13 +93,25 @@ export function sendToServer(captureData: CaptureData): Promise<ArchiveResponse>
  * Sends an update request for an existing page.
  */
 export function updateOnServer(pageId: number, captureData: CaptureData): Promise<ArchiveResponse> {
-  const dataSize = JSON.stringify(captureData).length;
-  console.log(`[Wayback] >>> Updating page ${pageId} on server (${dataSize} bytes)...`);
+  const jsonData = JSON.stringify(captureData);
   const startTime = Date.now();
 
-  const headers: Record<string, string> = {
+  let data: string;
+  let headers: Record<string, string> = {
     'Content-Type': 'application/json'
   };
+
+  // Compress if enabled (recommended for remote deployments)
+  if (CONFIG.ENABLE_COMPRESSION) {
+    const { compressed, originalSize, compressedSize } = compressData(jsonData);
+    const compressionRatio = ((1 - compressedSize / originalSize) * 100).toFixed(1);
+    console.log(`[Wayback] >>> Updating page ${pageId} on server (${originalSize} bytes → ${compressedSize} bytes, ${compressionRatio}% reduction)...`);
+    data = compressed;
+    headers['Content-Encoding'] = 'gzip';
+  } else {
+    console.log(`[Wayback] >>> Updating page ${pageId} on server (${jsonData.length} bytes, uncompressed)...`);
+    data = jsonData;
+  }
 
   // Add Basic Auth header if password is configured
   if (CONFIG.AUTH_PASSWORD) {
@@ -76,7 +124,8 @@ export function updateOnServer(pageId: number, captureData: CaptureData): Promis
       method: 'PUT',
       url: `${CONFIG.SERVER_URL}/${pageId}`,
       headers,
-      data: JSON.stringify(captureData),
+      data: data,
+      binary: CONFIG.ENABLE_COMPRESSION,
       timeout: CONFIG.REQUEST_TIMEOUT,
       onload: (response) => {
         const elapsed = Date.now() - startTime;
