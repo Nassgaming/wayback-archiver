@@ -16,8 +16,8 @@ import (
 )
 
 const (
-	// 最大资源下载大小：50MB
-	maxResourceSize = 50 * 1024 * 1024
+	// 最大资源下载大小：200MB
+	maxResourceSize = 200 * 1024 * 1024
 )
 
 type FileStorage struct {
@@ -25,7 +25,7 @@ type FileStorage struct {
 	httpClient *http.Client
 }
 
-func NewFileStorage(baseDir string) *FileStorage {
+func NewFileStorage(baseDir string, downloadTimeout ...int) *FileStorage {
 	// 创建 HTTP 客户端，支持代理
 	transport := &http.Transport{}
 
@@ -40,8 +40,13 @@ func NewFileStorage(baseDir string) *FileStorage {
 		}
 	}
 
+	timeout := 30
+	if len(downloadTimeout) > 0 && downloadTimeout[0] > 0 {
+		timeout = downloadTimeout[0]
+	}
+
 	client := &http.Client{
-		Timeout:   30 * time.Second,
+		Timeout:   time.Duration(timeout) * time.Second,
 		Transport: transport,
 	}
 
@@ -172,15 +177,16 @@ func (fs *FileStorage) SaveHTML(url, html string, timestamp time.Time) (string, 
 }
 
 // DownloadResource 下载资源并计算哈希，支持可选的认证 headers
-func (fs *FileStorage) DownloadResource(resourceURL string, pageURL string, headers map[string]string) ([]byte, string, error) {
+// 小于 streamThreshold 的资源读入内存返回 data；大于的流式写入临时文件返回 tmpPath
+func (fs *FileStorage) DownloadResource(resourceURL string, pageURL string, headers map[string]string, streamThreshold int64) (data []byte, hash string, tmpPath string, err error) {
 	// 防止 SSRF 攻击：拒绝内网地址和云元数据服务
 	if err := validateResourceURL(resourceURL); err != nil {
-		return nil, "", fmt.Errorf("invalid resource URL: %w", err)
+		return nil, "", "", fmt.Errorf("invalid resource URL: %w", err)
 	}
 
 	req, err := http.NewRequest("GET", resourceURL, nil)
 	if err != nil {
-		return nil, "", fmt.Errorf("create request failed: %w", err)
+		return nil, "", "", fmt.Errorf("create request failed: %w", err)
 	}
 
 	// 设置 User-Agent
@@ -200,36 +206,132 @@ func (fs *FileStorage) DownloadResource(resourceURL string, pageURL string, head
 
 	resp, err := fs.httpClient.Do(req)
 	if err != nil {
-		return nil, "", err
+		return nil, "", "", err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, "", fmt.Errorf("failed to download: status %d", resp.StatusCode)
+		return nil, "", "", fmt.Errorf("failed to download: status %d", resp.StatusCode)
 	}
 
 	// 检查 Content-Length，防止下载超大文件
 	if resp.ContentLength > maxResourceSize {
-		return nil, "", fmt.Errorf("resource too large: %d bytes (max: %d)", resp.ContentLength, maxResourceSize)
+		return nil, "", "", fmt.Errorf("resource too large: %d bytes (max: %d)", resp.ContentLength, maxResourceSize)
 	}
 
-	// 使用 LimitReader 限制读取大小，防止恶意响应
+	// 使用 LimitReader 限制读取大小
 	limitedReader := io.LimitReader(resp.Body, maxResourceSize+1)
-	data, err := io.ReadAll(limitedReader)
+
+	// 已知大文件 或 阈值为 0（全部落盘）：直接流式写磁盘，内存占用 ≈ 0
+	if resp.ContentLength > streamThreshold || streamThreshold <= 0 {
+		return fs.downloadToFile(limitedReader)
+	}
+
+	// 已知小文件（Content-Length ≤ 阈值）：直接读入内存
+	if resp.ContentLength >= 0 {
+		memData, readErr := io.ReadAll(limitedReader)
+		if readErr != nil {
+			return nil, "", "", readErr
+		}
+		if int64(len(memData)) > maxResourceSize {
+			return nil, "", "", fmt.Errorf("resource exceeds size limit: %d bytes (max: %d)", len(memData), maxResourceSize)
+		}
+		hashBytes := sha256.Sum256(memData)
+		return memData, hex.EncodeToString(hashBytes[:]), "", nil
+	}
+
+	// Content-Length 未知：先读到内存，超过阈值后溢出到磁盘
+	return fs.downloadBuffered(limitedReader, streamThreshold)
+}
+
+// downloadToFile 流式下载到临时文件，边写边算哈希，内存占用 ≈ 0
+func (fs *FileStorage) downloadToFile(reader io.Reader) (data []byte, hash string, tmpPath string, err error) {
+	tmpDir := filepath.Join(fs.baseDir, "tmp")
+	if err := os.MkdirAll(tmpDir, 0755); err != nil {
+		return nil, "", "", err
+	}
+
+	tmpFile, err := os.CreateTemp(tmpDir, "dl-*.tmp")
 	if err != nil {
-		return nil, "", err
+		return nil, "", "", err
+	}
+	defer func() {
+		tmpFile.Close()
+		if err != nil {
+			os.Remove(tmpFile.Name())
+		}
+	}()
+
+	hasher := sha256.New()
+	written, err := io.Copy(tmpFile, io.TeeReader(reader, hasher))
+	if err != nil {
+		return nil, "", "", err
 	}
 
-	// 检查实际读取的大小
-	if int64(len(data)) > maxResourceSize {
-		return nil, "", fmt.Errorf("resource exceeds size limit: %d bytes (max: %d)", len(data), maxResourceSize)
+	if written > maxResourceSize {
+		return nil, "", "", fmt.Errorf("resource exceeds size limit: %d bytes (max: %d)", written, maxResourceSize)
 	}
 
-	// 计算 SHA-256 哈希
-	hash := sha256.Sum256(data)
-	hashStr := hex.EncodeToString(hash[:])
+	hashStr := hex.EncodeToString(hasher.Sum(nil))
+	return nil, hashStr, tmpFile.Name(), nil
+}
 
-	return data, hashStr, nil
+// downloadBuffered 先读到内存，超过阈值后溢出到磁盘
+// 小文件全程在内存中完成；大文件在超过阈值的瞬间切换到磁盘流式写入
+func (fs *FileStorage) downloadBuffered(reader io.Reader, threshold int64) (data []byte, hash string, tmpPath string, err error) {
+	// 先读 threshold+1 字节到内存
+	buf := make([]byte, threshold+1)
+	n, readErr := io.ReadFull(reader, buf)
+
+	if readErr == io.ErrUnexpectedEOF || readErr == io.EOF {
+		// 读完了，实际大小 ≤ 阈值，全部在内存中
+		memData := buf[:n]
+		hashBytes := sha256.Sum256(memData)
+		return memData, hex.EncodeToString(hashBytes[:]), "", nil
+	}
+	if readErr != nil {
+		return nil, "", "", readErr
+	}
+
+	// 超过阈值，切换到磁盘：把已读的 buffer 写入临时文件，再流式写入剩余数据
+	tmpDir := filepath.Join(fs.baseDir, "tmp")
+	if err := os.MkdirAll(tmpDir, 0755); err != nil {
+		return nil, "", "", err
+	}
+
+	tmpFile, tmpErr := os.CreateTemp(tmpDir, "dl-*.tmp")
+	if tmpErr != nil {
+		return nil, "", "", tmpErr
+	}
+	defer func() {
+		tmpFile.Close()
+		if err != nil {
+			os.Remove(tmpFile.Name())
+		}
+	}()
+
+	hasher := sha256.New()
+
+	// 写入已读的 buffer
+	hasher.Write(buf[:n])
+	if _, wErr := tmpFile.Write(buf[:n]); wErr != nil {
+		return nil, "", "", wErr
+	}
+	buf = nil // 释放 buffer 内存
+
+	// 流式写入剩余数据
+	written, copyErr := io.Copy(tmpFile, io.TeeReader(reader, hasher))
+	if copyErr != nil {
+		return nil, "", "", copyErr
+	}
+
+	totalSize := int64(n) + written
+	if totalSize > maxResourceSize {
+		return nil, "", "", fmt.Errorf("resource exceeds size limit: %d bytes (max: %d)", totalSize, maxResourceSize)
+	}
+
+	hashStr := hex.EncodeToString(hasher.Sum(nil))
+	return nil, hashStr, tmpFile.Name(), nil
 }
 
 // isSameRootDomain checks if two URLs share the same root domain
@@ -305,6 +407,77 @@ func (fs *FileStorage) SaveResource(data []byte, hash, resourceType string) (str
 	// 返回相对路径
 	relPath, _ := filepath.Rel(fs.baseDir, filePath)
 	return relPath, nil
+}
+
+// SaveResourceFromFile 将临时文件移动到资源目录（大文件零拷贝存储）
+func (fs *FileStorage) SaveResourceFromFile(tmpPath, hash, resourceType string) (string, error) {
+	dir := filepath.Join(fs.baseDir, "resources", hash[:2], hash[2:4])
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return "", err
+	}
+
+	ext := getExtension(resourceType)
+	filename := hash + ext
+	filePath := filepath.Join(dir, filename)
+
+	// 如果文件已存在，删除临时文件并返回路径
+	if _, err := os.Stat(filePath); err == nil {
+		os.Remove(tmpPath)
+		relPath, _ := filepath.Rel(fs.baseDir, filePath)
+		return relPath, nil
+	}
+
+	// 先尝试 rename（同文件系统零拷贝），失败则 copy
+	if err := os.Rename(tmpPath, filePath); err != nil {
+		// 跨文件系统 rename 会失败，用 copy 兜底
+		if copyErr := copyFile(tmpPath, filePath); copyErr != nil {
+			return "", copyErr
+		}
+		os.Remove(tmpPath)
+	}
+
+	relPath, _ := filepath.Rel(fs.baseDir, filePath)
+	return relPath, nil
+}
+
+// CleanupTmp 清理临时目录中的残留文件（进程崩溃或 OOM kill 后 defer 未执行的孤儿文件）
+func (fs *FileStorage) CleanupTmp() (int, error) {
+	tmpDir := filepath.Join(fs.baseDir, "tmp")
+	entries, err := os.ReadDir(tmpDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, err
+	}
+
+	removed := 0
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		os.Remove(filepath.Join(tmpDir, entry.Name()))
+		removed++
+	}
+	return removed, nil
+}
+
+// copyFile copies src to dst
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, in)
+	return err
 }
 
 // UpdateResource updates an existing resource file with new content
